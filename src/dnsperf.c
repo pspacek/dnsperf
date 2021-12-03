@@ -859,6 +859,7 @@ typedef struct {
     uint64_t                sent;
     bool                    unexpected;
     bool                    short_response;
+    bool                    ad;
     char*                   desc;
 } received_query_t;
 
@@ -893,6 +894,7 @@ recv_one(threadinfo_t* tinfo, int which_sock,
     recvd->unexpected     = false;
     recvd->short_response = (n < 4);
     recvd->desc           = NULL;
+    recvd->ad             = (ntohs(packet_header[1]) & 0x20) ? true : false;
     return true;
 }
 
@@ -1010,11 +1012,12 @@ do_recv(void* arg)
             latency = recvd[i].when - recvd[i].sent;
             if (recvd[i].desc != NULL) {
                 perf_log_printf(
-                    "> %s %s %u.%06u",
+                    "> %s %s %u.%06u %u",
                     perf_dns_rcode_strings[recvd[i].rcode],
                     recvd[i].desc,
                     (unsigned int)(latency / MILLION),
-                    (unsigned int)(latency % MILLION));
+                    (unsigned int)(latency % MILLION),
+                    recvd[i].ad);
                 free(recvd[i].desc);
             }
 
