@@ -32,6 +32,7 @@
 #include "util.h"
 #include "list.h"
 #include "buffer.h"
+#include "hg64.h"
 
 #include <inttypes.h>
 #include <errno.h>
@@ -48,6 +49,8 @@
 #include <openssl/ssl.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
+
+#define HISTOGRAM_SIGBITS 4
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
@@ -113,6 +116,7 @@ typedef struct {
     uint64_t total_request_size;
     uint64_t total_response_size;
 
+    hg64*    latency;
     uint64_t latency_sum;
     uint64_t latency_sum_squares;
     uint64_t latency_min;
@@ -365,6 +369,20 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
             stddev(stats->latency_sum_squares, stats->latency_sum,
                 stats->num_completed)
                 / MILLION);
+        unsigned key = 0, tmp = 0;
+        uint64_t pmin, pmax, pcount;
+        while (hg64_get(stats->latency, key, &pmin, &pmax, &pcount) != false) {
+            if (pmin > config->timeout)
+                break;
+            key++;
+            if (pmin > 1000)
+                tmp++;
+            if (pcount > 0) {
+                printf("latency: %lu.%06lu - %lu.%06lu: %lu\n", pmin / MILLION, pmin % MILLION, pmax / MILLION, pmax % MILLION, pcount);
+            }
+        };
+        printf("last key: %u\n", key - 1);
+        printf("cnt >= 1 ms <= timeout: %u\n", tmp);
     }
 
     printf("\n");
@@ -394,15 +412,20 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     printf("\n");
 }
 
+/*
+ * Caller must free() stats->latency.
+ */
 static void
 sum_stats(const config_t* config, stats_t* total)
 {
     unsigned int i, j;
 
     memset(total, 0, sizeof(*total));
+    total->latency = hg64_create(HISTOGRAM_SIGBITS);
 
     for (i = 0; i < config->threads; i++) {
         stats_t* stats = &threads[i].stats;
+        hg64_merge(total->latency, stats->latency);
 
         for (j = 0; j < 16; j++)
             total->rcodecounts[j] += stats->rcodecounts[j];
@@ -1106,6 +1129,7 @@ do_recv(void* arg)
             stats->total_response_size += recvd[i].size;
             stats->rcodecounts[recvd[i].rcode]++;
             stats->latency_sum += latency;
+            hg64_inc(stats->latency, latency);
             stats->latency_sum_squares += (latency * latency);
             if (latency < stats->latency_min || stats->num_completed == 1)
                 stats->latency_min = latency;
@@ -1174,7 +1198,10 @@ do_interval_stats(void* arg)
         }
 
         last_interval_time = now;
-        last               = total;
+        if (last.latency != NULL) {
+            free(last.latency);
+        }
+        last = total;
     }
 
     return NULL;
@@ -1269,6 +1296,7 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
 
     perf_list_init(tinfo->outstanding_queries);
     perf_list_init(tinfo->unused_queries);
+    tinfo->stats.latency = hg64_create(HISTOGRAM_SIGBITS);
     for (i = 0; i < NQIDS; i++) {
         perf_link_init(&tinfo->queries[i]);
         perf_list_append(tinfo->unused_queries, &tinfo->queries[i]);
@@ -1413,7 +1441,7 @@ int main(int argc, char** argv)
     perf_os_blocksignal(SIGINT, false);
     sock.fd = mainpipe[0];
     result  = perf_os_waituntilreadable(&sock, intrpipe[0],
-        times.stop_time - times.start_time);
+         times.stop_time - times.start_time);
     if (result == PERF_R_CANCELED)
         interrupted = true;
 
