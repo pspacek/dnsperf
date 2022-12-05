@@ -1098,9 +1098,9 @@ do_interval_stats(void* arg)
 {
     threadinfo_t*          tinfo;
     stats_t                total;
+    stats_t                last;
     uint64_t               now;
     uint64_t               last_interval_time;
-    uint64_t               last_completed;
     uint64_t               interval_time;
     uint64_t               num_completed;
     double                 qps;
@@ -1108,7 +1108,7 @@ do_interval_stats(void* arg)
 
     tinfo              = arg;
     last_interval_time = tinfo->times->start_time;
-    last_completed     = 0;
+    memset(&last, 0, sizeof(last));
 
     wait_for_start();
     while (perf_os_waituntilreadable(&sock, threadpipe[0],
@@ -1117,13 +1117,13 @@ do_interval_stats(void* arg)
         now = perf_get_time();
         sum_stats(tinfo->config, &total);
         interval_time = now - last_interval_time;
-        num_completed = total.num_completed - last_completed;
+        num_completed = total.num_completed - last.num_completed;
         qps           = num_completed / (((double)interval_time) / MILLION);
         perf_log_printf("%u.%06u: %.6lf",
             (unsigned int)(now / MILLION),
             (unsigned int)(now % MILLION), qps);
         last_interval_time = now;
-        last_completed     = total.num_completed;
+        last               = total;
     }
 
     return NULL;
