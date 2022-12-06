@@ -323,6 +323,22 @@ hg64_merge(hg64 *target, hg64 *source) {
 	}
 }
 
+/*
+ * diff = a - b
+ */
+void hg64_diff(hg64* a, hg64* b, hg64* diff)
+{
+    assert(a->sigbits == b->sigbits == diff->sigbits);
+    uint64_t count_a = 0;
+    uint64_t count_b = 0;
+    for (unsigned key = 0;
+         hg64_get(a, key, NULL, NULL, &count_a);
+         key++) {
+        hg64_get(b, key, NULL, NULL, &count_b);
+        add_key_count(diff, key, a - b);
+    }
+}
+
 hg64s *
 hg64_snapshot(hg64 *hg) {
 	unsigned binsize = BINSIZE(hg);
