@@ -474,6 +474,15 @@ Waiting for responses may timeout and the timeout used for this is the
 same as specified by \fB-t\fR.
 Note that this option is only useful for connection oriented protocols.
 .RE
+\fBverbose-interval-stats=\fIBOOLEAN\fR
+.br
+.RS
+Make statistics printed by \fB-S\fR extra verbose and print larger set
+of statistics as normally generated at the very end of run. Please note
+min/max values for latency and connections are not available in interval
+statistics and the format is subject to change.
+.RE
+
 .SH "SEE ALSO"
 \fBresperf\fR(1)
 .SH AUTHOR
