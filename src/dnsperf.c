@@ -125,6 +125,7 @@ typedef struct {
     uint64_t num_conn_reconnect;
     uint64_t num_conn_completed;
 
+    hg64*    conn_latency;
     uint64_t conn_latency_sum;
     uint64_t conn_latency_sum_squares;
     uint64_t conn_latency_min;
@@ -413,7 +414,7 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
 }
 
 /*
- * Caller must free() stats->latency.
+ * Caller must free() stats->latency and stats->conn_latency.
  */
 static void
 sum_stats(const config_t* config, stats_t* total)
@@ -422,10 +423,12 @@ sum_stats(const config_t* config, stats_t* total)
 
     memset(total, 0, sizeof(*total));
     total->latency = hg64_create(HISTOGRAM_SIGBITS);
+    total->conn_latency = hg64_create(HISTOGRAM_SIGBITS);
 
     for (i = 0; i < config->threads; i++) {
         stats_t* stats = &threads[i].stats;
         hg64_merge(total->latency, stats->latency);
+        hg64_merge(total->conn_latency, stats->conn_latency);
 
         for (j = 0; j < 16; j++)
             total->rcodecounts[j] += stats->rcodecounts[j];
@@ -1201,6 +1204,9 @@ do_interval_stats(void* arg)
         if (last.latency != NULL) {
             free(last.latency);
         }
+        if (last.conn_latency != NULL) {
+            free(last.conn_latency);
+        }
         last = total;
     }
 
@@ -1267,6 +1273,7 @@ static void perf__net_event(struct perf_net_socket* sock, perf_socket_event_t ev
     case perf_socket_event_connected:
         stats->num_conn_completed++;
 
+        hg64_inc(stats->conn_latency, elapsed_time);
         stats->conn_latency_sum += elapsed_time;
         stats->conn_latency_sum_squares += (elapsed_time * elapsed_time);
         if (elapsed_time < stats->conn_latency_min || stats->num_conn_completed == 1)
@@ -1297,6 +1304,7 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
     perf_list_init(tinfo->outstanding_queries);
     perf_list_init(tinfo->unused_queries);
     tinfo->stats.latency = hg64_create(HISTOGRAM_SIGBITS);
+    tinfo->stats.conn_latency = hg64_create(HISTOGRAM_SIGBITS);
     for (i = 0; i < NQIDS; i++) {
         perf_link_init(&tinfo->queries[i]);
         perf_list_append(tinfo->unused_queries, &tinfo->queries[i]);
