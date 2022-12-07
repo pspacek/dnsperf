@@ -297,9 +297,17 @@ diff_stats(stats_t* last, stats_t* now, stats_t* diff)
 
     diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
     diff->conn_latency_sum_squares = now->conn_latency_sum_squares - last->conn_latency_sum_squares;
-    // hg64_diff(now->conn_latency, last->conn_latency, diff->conn_latency);
-    diff->conn_latency_min = 0;
-    diff->conn_latency_max = 0;
+    if (diff->conn_latency != NULL) {
+        free(diff->conn_latency);
+    }
+    diff->conn_latency = hg64_create(HISTOGRAM_SIGBITS);
+    if (last->conn_latency != NULL) {
+        hg64_diff(now->conn_latency, last->conn_latency, diff->conn_latency);
+    } else { /* first sample */
+        hg64_merge(diff->conn_latency, now->conn_latency);
+    }
+    hg64_get(diff->conn_latency, hg64_min_key(diff->conn_latency), &diff->conn_latency_min, NULL, NULL);
+    hg64_get(diff->conn_latency, hg64_max_key(diff->conn_latency), NULL, &diff->conn_latency_max, NULL);
 }
 
 /*
@@ -418,14 +426,14 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     if (stats->num_conn_completed > 1) {
         printf("\n  Latency StdDev (s):   %f\n",
             stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
-        printf("  Connection latency bucket (s): connection count\n");
+        printf("  Latency bucket (s):   connection count\n");
         uint64_t pmin, pmax, pcount;
         for (unsigned key = 0;
              hg64_get(stats->conn_latency, key, &pmin, &pmax, &pcount) == true;
              key = hg64_next(stats->conn_latency, key)) {
             if (pcount == 0)
                 continue;
-            printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ": %" PRIu64 "\n",
+            printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ":  %" PRIu64 "\n",
                 pmin / MILLION,
                 pmin % MILLION,
                 pmax / MILLION,
