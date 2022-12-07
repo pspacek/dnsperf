@@ -29,6 +29,7 @@
 #include <stdlib.h>
 
 static bool log_err_stdout = false;
+bool        log_json       = true;
 
 pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER;
 
