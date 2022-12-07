@@ -20,6 +20,10 @@
 #ifndef PERF_LOG_H
 #define PERF_LOG_H 1
 
+#include <stdbool.h>
+
+extern bool log_json;
+
 void perf_log_printf(const char* fmt, ...);
 void perf_log_fatal(const char* fmt, ...);
 void perf_log_warning(const char* fmt, ...);

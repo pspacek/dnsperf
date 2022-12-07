@@ -446,6 +446,134 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
 }
 
 /*
+ * now != 0 is call to print stats in the middle of test run.
+ */
+static void
+print_statistics_json(const config_t* config, const times_t* times, stats_t* stats, uint64_t now, uint64_t interval_time)
+{
+    uint64_t     run_time;
+    bool         first_rcode;
+    uint64_t     latency_avg;
+    unsigned int i;
+
+    if (now != 0)
+        run_time = now - times->start_time;
+    else
+        run_time = times->end_time - times->start_time;
+
+    printf("{\"type\": \"stats_%s\", ", now != 0 ? "periodic" : "sum");
+
+    printf("\"since\": %" PRIu64 ", ", times->start_time); // TODO
+    printf("\"until\": %" PRIu64 ", ", now ? now : times->end_time);
+
+    printf("\"requests\": %" PRIu64 ", ", stats->num_sent);
+
+    printf("\"answers\": %" PRIu64 ", ", stats->num_completed);
+    /*
+    if (!log_json) {
+        printf("  %s lost:         %" PRIu64 " (%.2lf%%)\n",
+            units, stats->num_timedout,
+            PERF_SAFE_DIV(100.0 * stats->num_timedout, stats->num_sent));
+        if (stats->num_interrupted > 0)
+            printf("  %s interrupted:  %" PRIu64 " (%.2lf%%)\n",
+                units, stats->num_interrupted,
+                PERF_SAFE_DIV(100.0 * stats->num_interrupted, stats->num_sent));
+    }
+    */
+
+    printf("\"rcodes\": {");
+    first_rcode = true;
+    for (i = 0; i < 16; i++) {
+        if (stats->rcodecounts[i] == 0)
+            continue;
+        if (first_rcode)
+            first_rcode = false;
+        else
+            printf(", ");
+        printf("\"%d\": %" PRIu64, i, stats->rcodecounts[i]);
+    }
+    printf("}, ");
+
+    /*
+    if (!log_json) {
+        printf("  Average packet size:  request %u, response %u\n",
+            (unsigned int)PERF_SAFE_DIV(stats->total_request_size, stats->num_sent),
+            (unsigned int)PERF_SAFE_DIV(stats->total_response_size,
+                stats->num_completed));
+    } else { // todo
+    }
+
+    duplicates:
+        printf("  Run time (s):         %u.%06u\n",
+        printf("  %s per second:   %.6lf\n", units,
+    */
+
+    /* answer_latency start */
+    printf("\"answer_latency\": {");
+    latency_avg = PERF_SAFE_DIV(stats->latency_sum, stats->num_completed);
+    printf("\"avg\": %" PRIu64 ", ", latency_avg);
+    printf("\"min\": %" PRIu64 ", ", stats->latency_min);
+    printf("\"max\": %" PRIu64 ", ", stats->latency_max);
+
+    double stddev_val = stddev(stats->latency_sum_squares, stats->latency_sum,
+        stats->num_completed);
+    printf("\"stddev\": %f, ", stddev_val);
+
+    printf("\"buckets\": [");
+    uint64_t pmin, pmax, pcount;
+    bool     first = true;
+    for (unsigned key = 0;
+         hg64_get(stats->latency, key, &pmin, &pmax, &pcount) == true;
+         key = hg64_next(stats->latency, key)) {
+        if (pcount == 0)
+            continue;
+
+        printf("%s[%" PRIu64 ", %" PRIu64 ", %" PRIu64 "]", first ? "" : ", ", pmin, pmax, pcount);
+        first = false;
+    }
+
+    printf("]");
+    /* answer_latency end */
+    printf("}");
+
+    /*
+printf("Connection Statistics:\n\n");
+printf("  Reconnections:        %" PRIu64 "\n\n", stats->num_conn_reconnect);
+latency_avg = PERF_SAFE_DIV(stats->conn_latency_sum, stats->num_conn_completed);
+printf("  Average Latency (s):  %u.%06u",
+    (unsigned int)(latency_avg / MILLION),
+    (unsigned int)(latency_avg % MILLION));
+if (now == 0) {
+    printf(" (min %u.%06u, max %u.%06u)\n",
+        (unsigned int)(stats->conn_latency_min / MILLION),
+        (unsigned int)(stats->conn_latency_min % MILLION),
+        (unsigned int)(stats->conn_latency_max / MILLION),
+        (unsigned int)(stats->conn_latency_max % MILLION));
+};
+if (stats->num_conn_completed > 1) {
+    printf("\n  Latency StdDev (s):   %f\n",
+        stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
+    printf("  Latency bucket (s):   connection count\n");
+    uint64_t pmin, pmax, pcount;
+    for (unsigned key = 0;
+         hg64_get(stats->conn_latency, key, &pmin, &pmax, &pcount) == true;
+         key = hg64_next(stats->conn_latency, key)) {
+        if (pcount == 0)
+            continue;
+        printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ":  %" PRIu64 "\n",
+            pmin / MILLION,
+            pmin % MILLION,
+            pmax / MILLION,
+            pmax % MILLION,
+            pcount);
+    };
+}
+*/
+
+    printf("}\n");
+}
+
+/*
  * Caller must free() stats->latency and stats->conn_latency.
  */
 static void
@@ -1222,14 +1350,19 @@ do_interval_stats(void* arg)
         now = perf_get_time();
         sum_stats(tinfo->config, &total);
         interval_time = now - last_interval_time;
-        num_completed = total.num_completed - last.num_completed;
-        qps           = num_completed / (((double)interval_time) / MILLION);
-        perf_log_printf("%u.%06u: %.6lf",
-            (unsigned int)(now / MILLION),
-            (unsigned int)(now % MILLION), qps);
+        if (!log_json) {
+            num_completed = total.num_completed - last.num_completed;
+            qps           = num_completed / (((double)interval_time) / MILLION);
+            perf_log_printf("%u.%06u: %.6lf",
+                (unsigned int)(now / MILLION),
+                (unsigned int)(now % MILLION), qps);
+        }
         if (tinfo->config->verbose_interval_stats) {
             diff_stats(&last, &total, &diff);
-            print_statistics(tinfo->config, tinfo->times, &diff, now, interval_time);
+            if (log_json)
+                print_statistics_json(tinfo->config, tinfo->times, &diff, now, interval_time);
+            else
+                print_statistics(tinfo->config, tinfo->times, &diff, now, interval_time);
         }
 
         last_interval_time = now;
@@ -1423,16 +1556,25 @@ int main(int argc, char** argv)
     perf_result_t          result;
     struct perf_net_socket sock = { .mode = sock_pipe };
 
-    printf("DNS Performance Testing Tool\n"
-           "Version " PACKAGE_VERSION "\n\n");
-
     (void)SSL_library_init();
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
     SSL_load_error_strings();
     OPENSSL_config(0);
 #endif
-
     setup(argc, argv, &config);
+    if (log_json) {
+        printf("{\"type\": \"header\", "
+               "\"version\": 20221207, "
+               "\"merged\": true, " /* all threads combined */
+               "\"time_units_per_sec\": 1000000, ");
+        printf("\"generator\": \"dnsperf %s\", ", PACKAGE_VERSION);
+        printf("\"stats_interval\": %" PRIu64 ", ", config.stats_interval);
+        printf("\"timeout\": %" PRIu64 "", config.timeout);
+        printf("}\n");
+    } else {
+        printf("DNS Performance Testing Tool\n"
+               "Version " PACKAGE_VERSION "\n\n");
+    }
 
     if (pipe(threadpipe) < 0 || pipe(mainpipe) < 0 || pipe(intrpipe) < 0)
         perf_log_fatal("creating pipe");
@@ -1451,7 +1593,9 @@ int main(int argc, char** argv)
         break;
     }
 
-    print_initial_status(&config);
+    if (!log_json) {
+        print_initial_status(&config);
+    }
 
     if (!(threads = calloc(config.threads, sizeof(threadinfo_t)))) {
         perf_log_fatal("out of memory");
@@ -1499,10 +1643,15 @@ int main(int argc, char** argv)
     for (i = 0; i < config.threads; i++)
         threadinfo_cleanup(&config, &threads[i], &times);
 
+    if (!log_json) {
     print_final_status(&config);
+    }
 
     sum_stats(&config, &total_stats);
-    print_statistics(&config, &times, &total_stats, 0, 0);
+    if (log_json)
+        print_statistics_json(&config, &times, &total_stats, 0, 0);
+    else
+        print_statistics(&config, &times, &total_stats, 0, 0);
     perf_net_stats_print(config.mode);
 
     cleanup(&config);
