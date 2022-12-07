@@ -278,16 +278,28 @@ diff_stats(stats_t* last, stats_t* now, stats_t* diff)
 
     diff->latency_sum         = now->latency_sum - last->latency_sum;
     diff->latency_sum_squares = now->latency_sum_squares - last->latency_sum_squares;
-    diff->latency_min         = 0; /* not enough data */
-    diff->latency_max         = 0;
+    if (diff->latency != NULL) {
+        free(diff->latency);
+    }
+    diff->latency = hg64_create(HISTOGRAM_SIGBITS);
+    if (last->latency != NULL) {
+        hg64_diff(now->latency, last->latency, diff->latency);
+    } else { /* first sample */
+        hg64_merge(diff->latency, now->latency);
+    }
+    diff->latency_min = 0;
+    hg64_get(diff->latency, hg64_next(diff->latency, 0), &diff->latency_min, NULL, NULL);
+    diff->latency_max = 0;
+    hg64_get(diff->latency, hg64_max_key(diff->latency), NULL, &diff->latency_max, NULL);
 
     diff->num_conn_reconnect = now->num_conn_reconnect - last->num_conn_reconnect;
     diff->num_conn_completed = now->num_conn_completed - last->num_conn_completed;
 
     diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
     diff->conn_latency_sum_squares = now->conn_latency_sum_squares - last->conn_latency_sum_squares;
-    diff->conn_latency_min         = 0;
-    diff->conn_latency_max         = 0;
+    // hg64_diff(now->conn_latency, last->conn_latency, diff->conn_latency);
+    diff->conn_latency_min = 0;
+    diff->conn_latency_max = 0;
 }
 
 /*
@@ -357,13 +369,11 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     printf("  Average Latency (s):  %u.%06u",
         (unsigned int)(latency_avg / MILLION),
         (unsigned int)(latency_avg % MILLION));
-    if (now == 0) {
-        printf(" (min %u.%06u, max %u.%06u)",
-            (unsigned int)(stats->latency_min / MILLION),
-            (unsigned int)(stats->latency_min % MILLION),
-            (unsigned int)(stats->latency_max / MILLION),
-            (unsigned int)(stats->latency_max % MILLION));
-    }
+    printf(" (min %u.%06u, max %u.%06u)",
+        (unsigned int)(stats->latency_min / MILLION),
+        (unsigned int)(stats->latency_min % MILLION),
+        (unsigned int)(stats->latency_max / MILLION),
+        (unsigned int)(stats->latency_max % MILLION));
 
     if (stats->num_completed > 1) {
         printf("\n  Latency StdDev (s):   %f\n",
@@ -422,7 +432,7 @@ sum_stats(const config_t* config, stats_t* total)
     unsigned int i, j;
 
     memset(total, 0, sizeof(*total));
-    total->latency = hg64_create(HISTOGRAM_SIGBITS);
+    total->latency      = hg64_create(HISTOGRAM_SIGBITS);
     total->conn_latency = hg64_create(HISTOGRAM_SIGBITS);
 
     for (i = 0; i < config->threads; i++) {
@@ -1303,7 +1313,7 @@ threadinfo_init(threadinfo_t* tinfo, const config_t* config,
 
     perf_list_init(tinfo->outstanding_queries);
     perf_list_init(tinfo->unused_queries);
-    tinfo->stats.latency = hg64_create(HISTOGRAM_SIGBITS);
+    tinfo->stats.latency      = hg64_create(HISTOGRAM_SIGBITS);
     tinfo->stats.conn_latency = hg64_create(HISTOGRAM_SIGBITS);
     for (i = 0; i < NQIDS; i++) {
         perf_link_init(&tinfo->queries[i]);

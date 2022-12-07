@@ -122,3 +122,6 @@ void hg64_merge(hg64 *target, hg64 *source);
  * value is greater than `size` the output has been truncated.
  */
 size_t hg64_export(hg64 *hg, uint8_t *buffer, size_t size);
+
+void hg64_diff(hg64* a, hg64* b, hg64* diff);
+unsigned hg64_max_key(hg64 *hg);
