@@ -339,13 +339,27 @@ void hg64_diff(hg64* a, hg64* b, hg64* diff)
     }
 }
 
+unsigned hg64_min_key(hg64 *hg)
+{
+    uint64_t pcount;
+    for (unsigned key = 0;
+         hg64_get(hg, key, NULL, NULL, &pcount);
+         key = hg64_next(hg, key)) {
+        if (pcount > 0)
+            return key;
+    }
+    return 0;
+}
+
 unsigned hg64_max_key(hg64 *hg)
 {
     unsigned last_key = 0;
+    uint64_t pcount;
     for (unsigned key = 0;
-         hg64_get(hg, key, NULL, NULL, NULL);
+         hg64_get(hg, key, NULL, NULL, &pcount);
          key = hg64_next(hg, key)) {
-        last_key = key;
+        if (pcount > 0)
+            last_key = key;
     }
     return last_key;
 }

@@ -288,7 +288,7 @@ diff_stats(stats_t* last, stats_t* now, stats_t* diff)
         hg64_merge(diff->latency, now->latency);
     }
     diff->latency_min = 0;
-    hg64_get(diff->latency, hg64_next(diff->latency, 0), &diff->latency_min, NULL, NULL);
+    hg64_get(diff->latency, hg64_min_key(diff->latency), &diff->latency_min, NULL, NULL);
     diff->latency_max = 0;
     hg64_get(diff->latency, hg64_max_key(diff->latency), NULL, &diff->latency_max, NULL);
 
@@ -387,7 +387,7 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
              key = hg64_next(stats->latency, key)) {
             if (pcount == 0)
                 continue;
-            printf("  %lu.%06lu - %lu.%06lu: %lu\n",
+            printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ": %" PRIu64 "\n",
                 pmin / MILLION,
                 pmin % MILLION,
                 pmax / MILLION,
@@ -418,6 +418,20 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
     if (stats->num_conn_completed > 1) {
         printf("\n  Latency StdDev (s):   %f\n",
             stddev(stats->conn_latency_sum_squares, stats->conn_latency_sum, stats->num_conn_completed) / MILLION);
+        printf("  Connection latency bucket (s): connection count\n");
+        uint64_t pmin, pmax, pcount;
+        for (unsigned key = 0;
+             hg64_get(stats->conn_latency, key, &pmin, &pmax, &pcount) == true;
+             key = hg64_next(stats->conn_latency, key)) {
+            if (pcount == 0)
+                continue;
+            printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ": %" PRIu64 "\n",
+                pmin / MILLION,
+                pmin % MILLION,
+                pmax / MILLION,
+                pmax % MILLION,
+                pcount);
+        };
     }
 
     printf("\n");
