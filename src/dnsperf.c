@@ -141,6 +141,7 @@ typedef struct {
     hg64* latency;
     hg64* conn_latency;
 #endif
+    uint64_t timestamp;
 } stats_t;
 
 typedef perf_list(struct query_info) query_list;
@@ -292,7 +293,7 @@ diff_stats(const config_t* config, stats_t* last, stats_t* now, stats_t* diff)
 
     diff->latency_sum         = now->latency_sum - last->latency_sum;
     diff->latency_sum_squares = now->latency_sum_squares - last->latency_sum_squares;
-    diff->latency_min         = 0; /* not enough data */
+    diff->latency_min         = 0; /* optional */
     diff->latency_max         = 0;
 
     diff->num_conn_reconnect = now->num_conn_reconnect - last->num_conn_reconnect;
@@ -300,7 +301,7 @@ diff_stats(const config_t* config, stats_t* last, stats_t* now, stats_t* diff)
 
     diff->conn_latency_sum         = now->conn_latency_sum - last->conn_latency_sum;
     diff->conn_latency_sum_squares = now->conn_latency_sum_squares - last->conn_latency_sum_squares;
-    diff->conn_latency_min         = 0;
+    diff->conn_latency_min         = 0; /* optional */
     diff->conn_latency_max         = 0;
 
 #ifdef USE_HISTOGRAMS
@@ -479,7 +480,7 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
  * now != 0 is call to print stats in the middle of test run.
  */
 static void
-print_statistics_json(const config_t* config, const times_t* times, stats_t* stats, uint64_t now, uint64_t interval_time)
+print_statistics_json(const config_t* config, const times_t* times, stats_t* stats, uint64_t since, uint64_t now)
 {
     uint64_t     run_time;
     bool         first_rcode;
@@ -493,7 +494,7 @@ print_statistics_json(const config_t* config, const times_t* times, stats_t* sta
 
     printf("{\"type\": \"stats_%s\", ", now != 0 ? "periodic" : "sum");
 
-    printf("\"since\": %" PRIu64 ", ", times->start_time); // TODO
+    printf("\"since\": %" PRIu64 ", ", since); // TODO
     printf("\"until\": %" PRIu64 ", ", now ? now : times->end_time);
 
     printf("\"requests\": %" PRIu64 ", ", stats->num_sent);
@@ -657,6 +658,7 @@ sum_stats(const config_t* config, stats_t* total)
         if (stats->conn_latency_max > total->conn_latency_max)
             total->conn_latency_max = stats->conn_latency_max;
     }
+    total->timestamp = perf_get_time();
 }
 
 static char*
@@ -1391,38 +1393,34 @@ do_interval_stats(void* arg)
     stats_t                total = {};
     stats_t                last  = {};
     stats_t                diff  = {};
-    uint64_t               now;
-    uint64_t               last_interval_time;
     uint64_t               interval_time;
     double                 qps;
     struct perf_net_socket sock = { .mode = sock_pipe, .fd = threadpipe[0] };
 
-    tinfo              = arg;
-    last_interval_time = tinfo->times->start_time;
+    tinfo          = arg;
+    last.timestamp = tinfo->times->start_time;
 
     wait_for_start();
     while (perf_os_waituntilreadable(&sock, threadpipe[0],
                tinfo->config->stats_interval)
            == PERF_R_TIMEDOUT) {
-        now = perf_get_time();
         sum_stats(tinfo->config, &total);
-        interval_time = now - last_interval_time;
+        interval_time = total.timestamp - last.timestamp;
         if (!log_json) {
             num_completed = total.num_completed - last.num_completed;
             qps           = num_completed / (((double)interval_time) / MILLION);
             perf_log_printf("%u.%06u: %.6lf",
-                (unsigned int)(now / MILLION),
-                (unsigned int)(now % MILLION), qps);
+                (unsigned int)(total.timestamp / MILLION),
+                (unsigned int)(total.timestamp % MILLION), qps);
         }
         if (tinfo->config->verbose_interval_stats) {
             diff_stats(&last, &total, &diff);
             if (log_json)
-                print_statistics_json(tinfo->config, tinfo->times, &diff, now, interval_time);
+                print_statistics_json(tinfo->config, tinfo->times, &diff, last.timestamp + 1, total.timestamp);
             else
-                print_statistics(tinfo->config, tinfo->times, &diff, now, interval_time);
+                print_statistics(tinfo->config, tinfo->times, &diff, last.timestamp + 1, total.timestamp);
         }
 
-        last_interval_time = now;
 #ifdef USE_HISTOGRAMS
         free(last.latency);
         free(last.conn_latency);
@@ -1716,9 +1714,9 @@ int main(int argc, char** argv)
 
     sum_stats(&config, &total_stats);
     if (log_json)
-        print_statistics_json(&config, &times, &total_stats, 0, 0);
+        print_statistics_json(&config, &times, &total_stats, times.start_time, 0);
     else
-        print_statistics(&config, &times, &total_stats, 0, 0);
+        print_statistics(&config, &times, &total_stats, times.start_time, 0);
     perf_net_stats_print(config.mode);
 
     cleanup(&config);
