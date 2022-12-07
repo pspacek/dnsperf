@@ -50,7 +50,7 @@
 #include <openssl/conf.h>
 #include <openssl/err.h>
 
-#define HISTOGRAM_SIGBITS 4
+#define HISTOGRAM_SIGBITS 5 /* about 1 % latency precision */
 
 #define DEFAULT_SERVER_NAME "127.0.0.1"
 #define DEFAULT_SERVER_PORT 53
@@ -380,20 +380,20 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
             stddev(stats->latency_sum_squares, stats->latency_sum,
                 stats->num_completed)
                 / MILLION);
-        unsigned key = 0, tmp = 0;
+        printf("  Latency bucket (s): answer count\n");
         uint64_t pmin, pmax, pcount;
-        while (hg64_get(stats->latency, key, &pmin, &pmax, &pcount) != false) {
-            if (pmin > config->timeout)
-                break;
-            key++;
-            if (pmin > 1000)
-                tmp++;
-            if (pcount > 0) {
-                printf("latency: %lu.%06lu - %lu.%06lu: %lu\n", pmin / MILLION, pmin % MILLION, pmax / MILLION, pmax % MILLION, pcount);
-            }
+        for (unsigned key = 0;
+             hg64_get(stats->latency, key, &pmin, &pmax, &pcount) == true;
+             key = hg64_next(stats->latency, key)) {
+            if (pcount == 0)
+                continue;
+            printf("  %lu.%06lu - %lu.%06lu: %lu\n",
+                pmin / MILLION,
+                pmin % MILLION,
+                pmax / MILLION,
+                pmax % MILLION,
+                pcount);
         };
-        printf("last key: %u\n", key - 1);
-        printf("cnt >= 1 ms <= timeout: %u\n", tmp);
     }
 
     printf("\n");
