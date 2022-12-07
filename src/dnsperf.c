@@ -380,14 +380,14 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
             stddev(stats->latency_sum_squares, stats->latency_sum,
                 stats->num_completed)
                 / MILLION);
-        printf("  Latency bucket (s): answer count\n");
+        printf("  Latency bucket (s):   answer count\n");
         uint64_t pmin, pmax, pcount;
         for (unsigned key = 0;
              hg64_get(stats->latency, key, &pmin, &pmax, &pcount) == true;
              key = hg64_next(stats->latency, key)) {
             if (pcount == 0)
                 continue;
-            printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ": %" PRIu64 "\n",
+            printf("  %" PRIu64 ".%06" PRIu64 " - %" PRIu64 ".%06" PRIu64 ":  %" PRIu64 "\n",
                 pmin / MILLION,
                 pmin % MILLION,
                 pmax / MILLION,
