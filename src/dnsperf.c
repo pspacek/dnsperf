@@ -483,7 +483,7 @@ print_statistics_json(const config_t* config, const times_t* times, stats_t* sta
     }
     */
 
-    printf("\"rcodes\": {");
+    printf("\"responses\": {");
     first_rcode = true;
     for (i = 0; i < 16; i++) {
         if (stats->rcodecounts[i] == 0)
@@ -492,7 +492,7 @@ print_statistics_json(const config_t* config, const times_t* times, stats_t* sta
             first_rcode = false;
         else
             printf(", ");
-        printf("\"%d\": %" PRIu64, i, stats->rcodecounts[i]);
+        printf("\"%s\": %" PRIu64, perf_dns_rcode_strings[i], stats->rcodecounts[i]);
     }
     printf("}, ");
 
