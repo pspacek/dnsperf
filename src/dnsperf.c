@@ -500,6 +500,8 @@ print_statistics_json(const config_t* config, const times_t* times, stats_t* sta
     printf("\"requests\": %" PRIu64 ", ", stats->num_sent);
 
     printf("\"answers\": %" PRIu64 ", ", stats->num_completed);
+    printf("\"timeouts\": %" PRIu64 ", ", stats->num_timedout);
+    printf("\"interrupted\": %" PRIu64 ", ", stats->num_interrupted);
     /*
     if (!log_json) {
         printf("  %s lost:         %" PRIu64 " (%.2lf%%)\n",
