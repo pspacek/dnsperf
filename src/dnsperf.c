@@ -112,6 +112,7 @@ typedef struct {
     uint64_t num_interrupted;
     uint64_t num_timedout;
     uint64_t num_completed;
+    uint64_t num_unexpected;
 
     uint64_t total_request_size;
     uint64_t total_response_size;
@@ -274,6 +275,7 @@ diff_stats(stats_t* last, stats_t* now, stats_t* diff)
     diff->num_interrupted = now->num_interrupted - last->num_interrupted;
     diff->num_timedout    = now->num_timedout - last->num_timedout;
     diff->num_completed   = now->num_completed - last->num_completed;
+    diff->num_unexpected   = now->num_unexpected - last->num_unexpected;
 
     diff->total_request_size  = now->total_request_size - last->total_request_size;
     diff->total_response_size = now->total_response_size - last->total_response_size;
@@ -346,6 +348,11 @@ print_statistics(const config_t* config, const times_t* times, stats_t* stats, u
         printf("  %s interrupted:  %" PRIu64 " (%.2lf%%)\n",
             units, stats->num_interrupted,
             PERF_SAFE_DIV(100.0 * stats->num_interrupted, stats->num_sent));
+    if (stats->num_unexpected > 0)
+        printf("  %s unexpected:  %" PRIu64 " (%.2lf%%)\n",
+            units, stats->num_unexpected,
+            PERF_SAFE_DIV(100.0 * stats->num_unexpected, stats->num_sent));
+
     printf("\n");
 
     printf("  Response codes:       ");
@@ -473,6 +480,7 @@ print_statistics_json(const config_t* config, const times_t* times, stats_t* sta
     printf("\"answers\": %" PRIu64 ", ", stats->num_completed);
     printf("\"timeouts\": %" PRIu64 ", ", stats->num_timedout);
     printf("\"interrupted\": %" PRIu64 ", ", stats->num_interrupted);
+    printf("\"unexpected\": %" PRIu64 ", ", stats->num_unexpected);
     /*
     if (!log_json) {
         printf("  %s lost:         %" PRIu64 " (%.2lf%%)\n",
@@ -601,6 +609,7 @@ sum_stats(const config_t* config, stats_t* total)
         total->num_interrupted += stats->num_interrupted;
         total->num_timedout += stats->num_timedout;
         total->num_completed += stats->num_completed;
+        total->num_unexpected += stats->num_unexpected;
 
         total->total_request_size += stats->total_request_size;
         total->total_response_size += stats->total_response_size;
@@ -1280,6 +1289,7 @@ do_recv(void* arg)
                                  "unexpected (maybe timed out) "
                                  "id: %u",
                     recvd[i].qid);
+                stats->num_unexpected++;
                 continue;
             }
             latency = recvd[i].when - recvd[i].sent;
