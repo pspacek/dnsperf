@@ -502,6 +502,7 @@ print_statistics_json(const config_t* config, const times_t* times, stats_t* sta
     printf("\"answers\": %" PRIu64 ", ", stats->num_completed);
     printf("\"timeouts\": %" PRIu64 ", ", stats->num_timedout);
     printf("\"interrupted\": %" PRIu64 ", ", stats->num_interrupted);
+    printf("\"unexpected\": %" PRIu64 ", ", stats->num_unexpected);
     /*
     if (!log_json) {
         printf("  %s lost:         %" PRIu64 " (%.2lf%%)\n",
@@ -1395,6 +1396,7 @@ do_interval_stats(void* arg)
     stats_t                total = {};
     stats_t                last  = {};
     stats_t                diff  = {};
+    uint64_t               num_completed;
     uint64_t               interval_time;
     double                 qps;
     struct perf_net_socket sock = { .mode = sock_pipe, .fd = threadpipe[0] };
@@ -1416,7 +1418,7 @@ do_interval_stats(void* arg)
                 (unsigned int)(total.timestamp % MILLION), qps);
         }
         if (tinfo->config->verbose_interval_stats) {
-            diff_stats(&last, &total, &diff);
+            diff_stats(tinfo->config, &last, &total, &diff);
             if (log_json)
                 print_statistics_json(tinfo->config, tinfo->times, &diff, last.timestamp + 1, total.timestamp);
             else
