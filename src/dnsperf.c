@@ -348,6 +348,22 @@ print_histogram(hg64* histogram, const char* const desc)
             pcount);
     };
 }
+
+static void
+print_histogram_json(hg64* histogram)
+{
+    uint64_t pmin, pmax, pcount;
+    bool     first = true;
+    for (unsigned key = 0;
+         hg64_get(histogram, key, &pmin, &pmax, &pcount) == true;
+         key = hg64_next(histogram, key)) {
+        if (pcount == 0)
+            continue;
+
+        printf("%s[%" PRIu64 ", %" PRIu64 ", %" PRIu64 "]", first ? "" : ", ", pmin, pmax, pcount);
+        first = false;
+    }
+}
 #endif
 
 /*
@@ -545,28 +561,25 @@ print_statistics_json(const config_t* config, const times_t* times, stats_t* sta
     /* answer_latency start */
     printf("\"answer_latency\": {");
     latency_avg = PERF_SAFE_DIV(stats->latency_sum, stats->num_completed);
-    printf("\"avg\": %" PRIu64 ", ", latency_avg);
-    printf("\"min\": %" PRIu64 ", ", stats->latency_min);
-    printf("\"max\": %" PRIu64 ", ", stats->latency_max);
+    printf("\"avg\": %" PRIu64, latency_avg);
+    if (stats->latency_min)
+        printf(", \"min\": %" PRIu64, stats->latency_min);
+    if (stats->latency_max)
+        printf(", \"max\": %" PRIu64, stats->latency_max);
 
-    double stddev_val = stddev(stats->latency_sum_squares, stats->latency_sum,
-        stats->num_completed);
-    printf("\"stddev\": %f, ", stddev_val);
+    if (stats->num_completed > 1) {
+        double stddev_val = stddev(stats->latency_sum_squares, stats->latency_sum,
+            stats->num_completed);
+        printf(", \"stddev\": %f", stddev_val);
+#ifdef USE_HISTOGRAMS
+        if (config->latency_histogram) {
 
-    printf("\"buckets\": [");
-    uint64_t pmin, pmax, pcount;
-    bool     first = true;
-    for (unsigned key = 0;
-         hg64_get(stats->latency, key, &pmin, &pmax, &pcount) == true;
-         key = hg64_next(stats->latency, key)) {
-        if (pcount == 0)
-            continue;
-
-        printf("%s[%" PRIu64 ", %" PRIu64 ", %" PRIu64 "]", first ? "" : ", ", pmin, pmax, pcount);
-        first = false;
+            printf(", \"buckets\": [");
+            print_histogram_json(stats->latency);
+            printf("]");
+        }
+#endif
     }
-
-    printf("]");
     /* answer_latency end */
     printf("}");
 
