@@ -781,6 +781,8 @@ setup(int argc, char** argv, config_t* config)
         "the URI to use for DNS-over-HTTPS", DEFAULT_DOH_URI, &doh_uri);
     perf_long_opt_add("doh-method", perf_opt_string, "doh_method",
         "the HTTP method to use for DNS-over-HTTPS: GET or POST", DEFAULT_DOH_METHOD, &doh_method);
+    perf_long_opt_add("json-output", perf_opt_boolean, NULL,
+        "switch output format to JSON dicts separated by newline", NULL, &log_json);
     perf_long_opt_add("suppress", perf_opt_string, "message[,message,...]",
         "suppress messages/warnings, see man-page for list of message types", NULL, &local_suppress);
     perf_long_opt_add("num-queries-per-conn", perf_opt_uint, "queries",
